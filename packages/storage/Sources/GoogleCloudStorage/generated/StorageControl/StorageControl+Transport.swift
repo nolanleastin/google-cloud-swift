@@ -15,480 +15,607 @@
 // limitations under the License.
 
 import Foundation
-#if canImport(FoundationNetworking)
-  import FoundationNetworking
-#endif
+import GRPC
+import GoogleCloudAuth
+import GoogleCloudGax
 import GoogleCloudWkt
+import GoogleIAMV1
 import GoogleLongRunning
 import GoogleRpc
-@_spi(GoogleCloudInternal) import GoogleCloudGax
+import NIO
+
+internal import StorageControlProtos
+internal import GoogleCloudWktConvert
+internal import SwiftProtobuf
 
 extension Clients {
-  class StorageControlTransport: StorageControlStub {
-    let inner: GoogleCloudGax._HTTPClient
+  class StorageControlTransport: StorageControlStub, @unchecked Sendable {
+    private let grpcClient: StorageControlProtos.Google_Storage_Control_V2_StorageControlAsyncClient
+    private let operationsClient: StorageControlProtos.Google_Longrunning_OperationsAsyncClient
+    private let connection: ClientConnection
+    private let credentials: GoogleCloudAuth.Credentials
+    private let options: GoogleCloudGax.ClientOptions
 
     public init(_ options: GoogleCloudGax.ClientOptions = .init()) throws {
-      self.inner = try GoogleCloudGax._HTTPClient(
-        from: options,
-        withDefaultEndpoint: "https://storage.googleapis.com",
+      self.options = options
+      self.credentials = try options.credentials ?? GoogleCloudAuth.Credentials()
+      self.connection = try Self.makeConnection(endpoint: options.endpoint)
+      self.grpcClient = StorageControlProtos.Google_Storage_Control_V2_StorageControlAsyncClient(
+        channel: self.connection
       )
+      self.operationsClient = StorageControlProtos.Google_Longrunning_OperationsAsyncClient(
+        channel: self.connection
+      )
+    }
+
+    deinit {
+      _ = self.connection.close()
+    }
+
+    private static func makeConnection(endpoint: String?) throws -> ClientConnection {
+      let raw = endpoint ?? "https://storage.googleapis.com"
+      guard let url = URLComponents(string: raw), let host = url.host, !host.isEmpty else {
+        throw GoogleCloudGax.ClientError.invalidEndpoint(raw)
+      }
+      let isSecure = url.scheme == "https"
+      let port = url.port ?? (isSecure ? 443 : 80)
+      let group = MultiThreadedEventLoopGroup.singleton
+      let builder =
+        isSecure
+        ? ClientConnection.usingPlatformAppropriateTLS(for: group)
+        : ClientConnection.insecure(group: group)
+      return builder.connect(host: host, port: port)
+    }
+
+    private func makeCallOptions(
+      options: GoogleCloudGax.RequestOptions,
+      routingParams: [String] = []
+    ) async throws -> GRPC.CallOptions {
+      var callOptions = GRPC.CallOptions()
+      if let attemptTimeout = options.attemptTimeout {
+        let nanoseconds =
+          attemptTimeout.components.seconds * 1_000_000_000
+          + attemptTimeout.components.attoseconds / 1_000_000_000
+        callOptions.timeLimit = .timeout(.nanoseconds(nanoseconds))
+      }
+      let authHeaders = try await self.credentials.headers()
+      for (key, value) in authHeaders {
+        callOptions.customMetadata.add(name: key, value: value)
+      }
+      callOptions.customMetadata.add(name: "x-goog-api-client", value: Clients.clientHeader)
+      if !routingParams.isEmpty {
+        callOptions.customMetadata.add(
+          name: "x-goog-request-params",
+          value: routingParams.joined(separator: "&")
+        )
+      }
+      return callOptions
     }
 
     public func createFolder(
       request: CreateFolderRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> Folder {
-      let path = try { () throws -> Swift.String in
-        guard let pathVariable0 = request.parent as Swift.String?, !pathVariable0.isEmpty else {
-          throw GoogleCloudGax.RequestError.binding("'request.parent' is not set or is empty")
-        }
-        return "/v2/\(pathVariable0)/folders"
-      }()
-      var query = [
-        URLQueryItem(name: "$alt", value: "json;enum-encoding=int")
-      ]
-      let encoder = GoogleCloudGax.QueryParameterEncoder()
-      query.append(contentsOf: try encoder.encode(request.folderId, prefix: "folderId"))
-      query.append(contentsOf: try encoder.encode(request.recursive, prefix: "recursive"))
-      query.append(contentsOf: try encoder.encode(request.requestId, prefix: "requestId"))
-      var req = try await self.inner.newRequest(path: path, query: query)
-      req.setMethod(.POST)
-      req.addHeader(name: "X-Goog-Api-Client", value: Clients.clientHeader)
-      if let body = request.folder {
-        req.setBody(data: try JSONEncoder().encode(body), ofContentType: "application/json")
+      var routingParams: [String] = []
+      if let pathVariable0 = request.parent as Swift.String?, !pathVariable0.isEmpty {
+        routingParams.append("parent=\(pathVariable0)")
       }
-      return try await req.rpc(
-        Folder.self, timeout: options.attemptTimeout
-      ).get()
+      let callOptions = try await self.makeCallOptions(
+        options: options, routingParams: routingParams)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.createFolder(
+        protoRequest, callOptions: callOptions
+      )
+      return try Folder(proto: protoResponse)
     }
 
     public func deleteFolder(
       request: DeleteFolderRequest, options: GoogleCloudGax.RequestOptions
     ) async throws {
-      let path = try { () throws -> Swift.String in
-        guard let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty else {
-          throw GoogleCloudGax.RequestError.binding("'request.name' is not set or is empty")
-        }
-        return "/v2/\(pathVariable0)"
-      }()
-      var query = [
-        URLQueryItem(name: "$alt", value: "json;enum-encoding=int")
-      ]
-      let encoder = GoogleCloudGax.QueryParameterEncoder()
-      query.append(
-        contentsOf: try encoder.encode(
-          request.ifMetagenerationMatch, prefix: "ifMetagenerationMatch"))
-      query.append(
-        contentsOf: try encoder.encode(
-          request.ifMetagenerationNotMatch, prefix: "ifMetagenerationNotMatch"))
-      query.append(contentsOf: try encoder.encode(request.requestId, prefix: "requestId"))
-      var req = try await self.inner.newRequest(path: path, query: query)
-      req.setMethod(.DELETE)
-      req.addHeader(name: "X-Goog-Api-Client", value: Clients.clientHeader)
-      _ = try await req.rpc(
-        GoogleCloudWkt.Empty.self, timeout: options.attemptTimeout
-      ).get()
+      var routingParams: [String] = []
+      if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
+        routingParams.append("name=\(pathVariable0)")
+      }
+      let callOptions = try await self.makeCallOptions(
+        options: options, routingParams: routingParams)
+      let protoRequest = try request.toProto()
+      _ = try await self.grpcClient.deleteFolder(protoRequest, callOptions: callOptions)
     }
 
     public func getFolder(
       request: GetFolderRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> Folder {
-      let path = try { () throws -> Swift.String in
-        guard let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty else {
-          throw GoogleCloudGax.RequestError.binding("'request.name' is not set or is empty")
-        }
-        return "/v2/\(pathVariable0)"
-      }()
-      var query = [
-        URLQueryItem(name: "$alt", value: "json;enum-encoding=int")
-      ]
-      let encoder = GoogleCloudGax.QueryParameterEncoder()
-      query.append(
-        contentsOf: try encoder.encode(
-          request.ifMetagenerationMatch, prefix: "ifMetagenerationMatch"))
-      query.append(
-        contentsOf: try encoder.encode(
-          request.ifMetagenerationNotMatch, prefix: "ifMetagenerationNotMatch"))
-      query.append(contentsOf: try encoder.encode(request.requestId, prefix: "requestId"))
-      var req = try await self.inner.newRequest(path: path, query: query)
-      req.setMethod(.GET)
-      req.addHeader(name: "X-Goog-Api-Client", value: Clients.clientHeader)
-      return try await req.rpc(
-        Folder.self, timeout: options.attemptTimeout
-      ).get()
+      var routingParams: [String] = []
+      if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
+        routingParams.append("name=\(pathVariable0)")
+      }
+      let callOptions = try await self.makeCallOptions(
+        options: options, routingParams: routingParams)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.getFolder(
+        protoRequest, callOptions: callOptions
+      )
+      return try Folder(proto: protoResponse)
     }
 
     public func listFolders(
       request: ListFoldersRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> ListFoldersResponse {
-      let path = try { () throws -> Swift.String in
-        guard let pathVariable0 = request.parent as Swift.String?, !pathVariable0.isEmpty else {
-          throw GoogleCloudGax.RequestError.binding("'request.parent' is not set or is empty")
-        }
-        return "/v2/\(pathVariable0)/folders"
-      }()
-      var query = [
-        URLQueryItem(name: "$alt", value: "json;enum-encoding=int")
-      ]
-      let encoder = GoogleCloudGax.QueryParameterEncoder()
-      query.append(contentsOf: try encoder.encode(request.pageSize, prefix: "pageSize"))
-      query.append(contentsOf: try encoder.encode(request.pageToken, prefix: "pageToken"))
-      query.append(contentsOf: try encoder.encode(request.`prefix`, prefix: "prefix"))
-      query.append(contentsOf: try encoder.encode(request.delimiter, prefix: "delimiter"))
-      query.append(
-        contentsOf: try encoder.encode(request.lexicographicStart, prefix: "lexicographicStart"))
-      query.append(
-        contentsOf: try encoder.encode(request.lexicographicEnd, prefix: "lexicographicEnd"))
-      query.append(contentsOf: try encoder.encode(request.requestId, prefix: "requestId"))
-      var req = try await self.inner.newRequest(path: path, query: query)
-      req.setMethod(.GET)
-      req.addHeader(name: "X-Goog-Api-Client", value: Clients.clientHeader)
-      return try await req.rpc(
-        ListFoldersResponse.self, timeout: options.attemptTimeout
-      ).get()
+      var routingParams: [String] = []
+      if let pathVariable0 = request.parent as Swift.String?, !pathVariable0.isEmpty {
+        routingParams.append("parent=\(pathVariable0)")
+      }
+      let callOptions = try await self.makeCallOptions(
+        options: options, routingParams: routingParams)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.listFolders(
+        protoRequest, callOptions: callOptions
+      )
+      return try ListFoldersResponse(proto: protoResponse)
     }
 
     public func renameFolder(
       request: RenameFolderRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> GoogleLongRunning.Operation {
-      let path = try { () throws -> Swift.String in
-        guard let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty else {
-          throw GoogleCloudGax.RequestError.binding("'request.name' is not set or is empty")
-        }
-        return "/v2/\(pathVariable0):rename"
-      }()
-      let query = [
-        URLQueryItem(name: "$alt", value: "json;enum-encoding=int")
-      ]
-      var req = try await self.inner.newRequest(path: path, query: query)
-      req.setMethod(.POST)
-      req.addHeader(name: "X-Goog-Api-Client", value: Clients.clientHeader)
-      req.setBody(data: try JSONEncoder().encode(request), ofContentType: "application/json")
-      return try await req.rpc(
-        GoogleLongRunning.Operation.self, timeout: options.attemptTimeout
-      ).get()
+      var routingParams: [String] = []
+      if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
+        routingParams.append("name=\(pathVariable0)")
+      }
+      let callOptions = try await self.makeCallOptions(
+        options: options, routingParams: routingParams)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.renameFolder(
+        protoRequest, callOptions: callOptions
+      )
+      return try GoogleLongRunning.Operation(proto: protoResponse)
     }
 
     public func deleteFolderRecursive(
       request: DeleteFolderRecursiveRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> GoogleLongRunning.Operation {
-      let path = try { () throws -> Swift.String in
-        guard let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty else {
-          throw GoogleCloudGax.RequestError.binding("'request.name' is not set or is empty")
-        }
-        return "/v2/\(pathVariable0):deleteRecursive"
-      }()
-      let query = [
-        URLQueryItem(name: "$alt", value: "json;enum-encoding=int")
-      ]
-      var req = try await self.inner.newRequest(path: path, query: query)
-      req.setMethod(.POST)
-      req.addHeader(name: "X-Goog-Api-Client", value: Clients.clientHeader)
-      req.setBody(data: try JSONEncoder().encode(request), ofContentType: "application/json")
-      return try await req.rpc(
-        GoogleLongRunning.Operation.self, timeout: options.attemptTimeout
-      ).get()
+      var routingParams: [String] = []
+      if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
+        routingParams.append("name=\(pathVariable0)")
+      }
+      let callOptions = try await self.makeCallOptions(
+        options: options, routingParams: routingParams)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.deleteFolderRecursive(
+        protoRequest, callOptions: callOptions
+      )
+      return try GoogleLongRunning.Operation(proto: protoResponse)
     }
 
     public func getStorageLayout(
       request: GetStorageLayoutRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> StorageLayout {
-      let path = try { () throws -> Swift.String in
-        guard let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty else {
-          throw GoogleCloudGax.RequestError.binding("'request.name' is not set or is empty")
-        }
-        return "/v2/\(pathVariable0)"
-      }()
-      var query = [
-        URLQueryItem(name: "$alt", value: "json;enum-encoding=int")
-      ]
-      let encoder = GoogleCloudGax.QueryParameterEncoder()
-      query.append(contentsOf: try encoder.encode(request.`prefix`, prefix: "prefix"))
-      query.append(contentsOf: try encoder.encode(request.requestId, prefix: "requestId"))
-      var req = try await self.inner.newRequest(path: path, query: query)
-      req.setMethod(.GET)
-      req.addHeader(name: "X-Goog-Api-Client", value: Clients.clientHeader)
-      return try await req.rpc(
-        StorageLayout.self, timeout: options.attemptTimeout
-      ).get()
+      var routingParams: [String] = []
+      if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
+        routingParams.append("name=\(pathVariable0)")
+      }
+      let callOptions = try await self.makeCallOptions(
+        options: options, routingParams: routingParams)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.getStorageLayout(
+        protoRequest, callOptions: callOptions
+      )
+      return try StorageLayout(proto: protoResponse)
+    }
+
+    public func createManagedFolder(
+      request: CreateManagedFolderRequest, options: GoogleCloudGax.RequestOptions
+    ) async throws -> ManagedFolder {
+      let callOptions = try await self.makeCallOptions(
+        options: options)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.createManagedFolder(
+        protoRequest, callOptions: callOptions
+      )
+      return try ManagedFolder(proto: protoResponse)
+    }
+
+    public func deleteManagedFolder(
+      request: DeleteManagedFolderRequest, options: GoogleCloudGax.RequestOptions
+    ) async throws {
+      let callOptions = try await self.makeCallOptions(
+        options: options)
+      let protoRequest = try request.toProto()
+      _ = try await self.grpcClient.deleteManagedFolder(protoRequest, callOptions: callOptions)
+    }
+
+    public func getManagedFolder(
+      request: GetManagedFolderRequest, options: GoogleCloudGax.RequestOptions
+    ) async throws -> ManagedFolder {
+      let callOptions = try await self.makeCallOptions(
+        options: options)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.getManagedFolder(
+        protoRequest, callOptions: callOptions
+      )
+      return try ManagedFolder(proto: protoResponse)
+    }
+
+    public func listManagedFolders(
+      request: ListManagedFoldersRequest, options: GoogleCloudGax.RequestOptions
+    ) async throws -> ListManagedFoldersResponse {
+      let callOptions = try await self.makeCallOptions(
+        options: options)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.listManagedFolders(
+        protoRequest, callOptions: callOptions
+      )
+      return try ListManagedFoldersResponse(proto: protoResponse)
+    }
+
+    public func updateManagedFolder(
+      request: UpdateManagedFolderRequest, options: GoogleCloudGax.RequestOptions
+    ) async throws -> ManagedFolder {
+      let callOptions = try await self.makeCallOptions(
+        options: options)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.updateManagedFolder(
+        protoRequest, callOptions: callOptions
+      )
+      return try ManagedFolder(proto: protoResponse)
+    }
+
+    public func createAnywhereCache(
+      request: CreateAnywhereCacheRequest, options: GoogleCloudGax.RequestOptions
+    ) async throws -> GoogleLongRunning.Operation {
+      let callOptions = try await self.makeCallOptions(
+        options: options)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.createAnywhereCache(
+        protoRequest, callOptions: callOptions
+      )
+      return try GoogleLongRunning.Operation(proto: protoResponse)
+    }
+
+    public func updateAnywhereCache(
+      request: UpdateAnywhereCacheRequest, options: GoogleCloudGax.RequestOptions
+    ) async throws -> GoogleLongRunning.Operation {
+      let callOptions = try await self.makeCallOptions(
+        options: options)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.updateAnywhereCache(
+        protoRequest, callOptions: callOptions
+      )
+      return try GoogleLongRunning.Operation(proto: protoResponse)
+    }
+
+    public func disableAnywhereCache(
+      request: DisableAnywhereCacheRequest, options: GoogleCloudGax.RequestOptions
+    ) async throws -> AnywhereCache {
+      let callOptions = try await self.makeCallOptions(
+        options: options)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.disableAnywhereCache(
+        protoRequest, callOptions: callOptions
+      )
+      return try AnywhereCache(proto: protoResponse)
+    }
+
+    public func pauseAnywhereCache(
+      request: PauseAnywhereCacheRequest, options: GoogleCloudGax.RequestOptions
+    ) async throws -> AnywhereCache {
+      let callOptions = try await self.makeCallOptions(
+        options: options)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.pauseAnywhereCache(
+        protoRequest, callOptions: callOptions
+      )
+      return try AnywhereCache(proto: protoResponse)
+    }
+
+    public func resumeAnywhereCache(
+      request: ResumeAnywhereCacheRequest, options: GoogleCloudGax.RequestOptions
+    ) async throws -> AnywhereCache {
+      let callOptions = try await self.makeCallOptions(
+        options: options)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.resumeAnywhereCache(
+        protoRequest, callOptions: callOptions
+      )
+      return try AnywhereCache(proto: protoResponse)
+    }
+
+    public func getAnywhereCache(
+      request: GetAnywhereCacheRequest, options: GoogleCloudGax.RequestOptions
+    ) async throws -> AnywhereCache {
+      let callOptions = try await self.makeCallOptions(
+        options: options)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.getAnywhereCache(
+        protoRequest, callOptions: callOptions
+      )
+      return try AnywhereCache(proto: protoResponse)
+    }
+
+    public func listAnywhereCaches(
+      request: ListAnywhereCachesRequest, options: GoogleCloudGax.RequestOptions
+    ) async throws -> ListAnywhereCachesResponse {
+      let callOptions = try await self.makeCallOptions(
+        options: options)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.listAnywhereCaches(
+        protoRequest, callOptions: callOptions
+      )
+      return try ListAnywhereCachesResponse(proto: protoResponse)
+    }
+
+    public func createRapidCache(
+      request: CreateRapidCacheRequest, options: GoogleCloudGax.RequestOptions
+    ) async throws -> GoogleLongRunning.Operation {
+      let callOptions = try await self.makeCallOptions(
+        options: options)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.createRapidCache(
+        protoRequest, callOptions: callOptions
+      )
+      return try GoogleLongRunning.Operation(proto: protoResponse)
+    }
+
+    public func updateRapidCache(
+      request: UpdateRapidCacheRequest, options: GoogleCloudGax.RequestOptions
+    ) async throws -> GoogleLongRunning.Operation {
+      let callOptions = try await self.makeCallOptions(
+        options: options)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.updateRapidCache(
+        protoRequest, callOptions: callOptions
+      )
+      return try GoogleLongRunning.Operation(proto: protoResponse)
+    }
+
+    public func getRapidCache(
+      request: GetRapidCacheRequest, options: GoogleCloudGax.RequestOptions
+    ) async throws -> RapidCache {
+      let callOptions = try await self.makeCallOptions(
+        options: options)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.getRapidCache(
+        protoRequest, callOptions: callOptions
+      )
+      return try RapidCache(proto: protoResponse)
+    }
+
+    public func listRapidCaches(
+      request: ListRapidCachesRequest, options: GoogleCloudGax.RequestOptions
+    ) async throws -> ListRapidCachesResponse {
+      let callOptions = try await self.makeCallOptions(
+        options: options)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.listRapidCaches(
+        protoRequest, callOptions: callOptions
+      )
+      return try ListRapidCachesResponse(proto: protoResponse)
     }
 
     public func getProjectIntelligenceConfig(
       request: GetProjectIntelligenceConfigRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> IntelligenceConfig {
-      let path = try { () throws -> Swift.String in
-        guard let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty else {
-          throw GoogleCloudGax.RequestError.binding("'request.name' is not set or is empty")
-        }
-        return "/v2/\(pathVariable0)"
-      }()
-      let query = [
-        URLQueryItem(name: "$alt", value: "json;enum-encoding=int")
-      ]
-      var req = try await self.inner.newRequest(path: path, query: query)
-      req.setMethod(.GET)
-      req.addHeader(name: "X-Goog-Api-Client", value: Clients.clientHeader)
-      return try await req.rpc(
-        IntelligenceConfig.self, timeout: options.attemptTimeout
-      ).get()
+      var routingParams: [String] = []
+      if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
+        routingParams.append("name=\(pathVariable0)")
+      }
+      let callOptions = try await self.makeCallOptions(
+        options: options, routingParams: routingParams)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.getProjectIntelligenceConfig(
+        protoRequest, callOptions: callOptions
+      )
+      return try IntelligenceConfig(proto: protoResponse)
     }
 
     public func updateProjectIntelligenceConfig(
       request: UpdateProjectIntelligenceConfigRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> IntelligenceConfig {
-      let path = try { () throws -> Swift.String in
-        guard let pathVariable0 = request.intelligenceConfig.map({ $0.name }),
-          !pathVariable0.isEmpty
-        else {
-          throw GoogleCloudGax.RequestError.binding(
-            "'request.intelligence_config.name' is not set or is empty")
-        }
-        return "/v2/\(pathVariable0)"
-      }()
-      var query = [
-        URLQueryItem(name: "$alt", value: "json;enum-encoding=int")
-      ]
-      let encoder = GoogleCloudGax.QueryParameterEncoder()
-      query.append(contentsOf: try encoder.encode(request.updateMask, prefix: "updateMask"))
-      query.append(contentsOf: try encoder.encode(request.requestId, prefix: "requestId"))
-      var req = try await self.inner.newRequest(path: path, query: query)
-      req.setMethod(.PATCH)
-      req.addHeader(name: "X-Goog-Api-Client", value: Clients.clientHeader)
-      if let body = request.intelligenceConfig {
-        req.setBody(data: try JSONEncoder().encode(body), ofContentType: "application/json")
+      var routingParams: [String] = []
+      if let pathVariable0 = request.intelligenceConfig.map({ $0.name }), !pathVariable0.isEmpty {
+        routingParams.append("intelligence_config.name=\(pathVariable0)")
       }
-      return try await req.rpc(
-        IntelligenceConfig.self, timeout: options.attemptTimeout
-      ).get()
+      let callOptions = try await self.makeCallOptions(
+        options: options, routingParams: routingParams)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.updateProjectIntelligenceConfig(
+        protoRequest, callOptions: callOptions
+      )
+      return try IntelligenceConfig(proto: protoResponse)
     }
 
     public func getFolderIntelligenceConfig(
       request: GetFolderIntelligenceConfigRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> IntelligenceConfig {
-      let path = try { () throws -> Swift.String in
-        guard let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty else {
-          throw GoogleCloudGax.RequestError.binding("'request.name' is not set or is empty")
-        }
-        return "/v2/\(pathVariable0)"
-      }()
-      let query = [
-        URLQueryItem(name: "$alt", value: "json;enum-encoding=int")
-      ]
-      var req = try await self.inner.newRequest(path: path, query: query)
-      req.setMethod(.GET)
-      req.addHeader(name: "X-Goog-Api-Client", value: Clients.clientHeader)
-      return try await req.rpc(
-        IntelligenceConfig.self, timeout: options.attemptTimeout
-      ).get()
+      var routingParams: [String] = []
+      if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
+        routingParams.append("name=\(pathVariable0)")
+      }
+      let callOptions = try await self.makeCallOptions(
+        options: options, routingParams: routingParams)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.getFolderIntelligenceConfig(
+        protoRequest, callOptions: callOptions
+      )
+      return try IntelligenceConfig(proto: protoResponse)
     }
 
     public func updateFolderIntelligenceConfig(
       request: UpdateFolderIntelligenceConfigRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> IntelligenceConfig {
-      let path = try { () throws -> Swift.String in
-        guard let pathVariable0 = request.intelligenceConfig.map({ $0.name }),
-          !pathVariable0.isEmpty
-        else {
-          throw GoogleCloudGax.RequestError.binding(
-            "'request.intelligence_config.name' is not set or is empty")
-        }
-        return "/v2/\(pathVariable0)"
-      }()
-      var query = [
-        URLQueryItem(name: "$alt", value: "json;enum-encoding=int")
-      ]
-      let encoder = GoogleCloudGax.QueryParameterEncoder()
-      query.append(contentsOf: try encoder.encode(request.updateMask, prefix: "updateMask"))
-      query.append(contentsOf: try encoder.encode(request.requestId, prefix: "requestId"))
-      var req = try await self.inner.newRequest(path: path, query: query)
-      req.setMethod(.PATCH)
-      req.addHeader(name: "X-Goog-Api-Client", value: Clients.clientHeader)
-      if let body = request.intelligenceConfig {
-        req.setBody(data: try JSONEncoder().encode(body), ofContentType: "application/json")
+      var routingParams: [String] = []
+      if let pathVariable0 = request.intelligenceConfig.map({ $0.name }), !pathVariable0.isEmpty {
+        routingParams.append("intelligence_config.name=\(pathVariable0)")
       }
-      return try await req.rpc(
-        IntelligenceConfig.self, timeout: options.attemptTimeout
-      ).get()
+      let callOptions = try await self.makeCallOptions(
+        options: options, routingParams: routingParams)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.updateFolderIntelligenceConfig(
+        protoRequest, callOptions: callOptions
+      )
+      return try IntelligenceConfig(proto: protoResponse)
     }
 
     public func getOrganizationIntelligenceConfig(
       request: GetOrganizationIntelligenceConfigRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> IntelligenceConfig {
-      let path = try { () throws -> Swift.String in
-        guard let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty else {
-          throw GoogleCloudGax.RequestError.binding("'request.name' is not set or is empty")
-        }
-        return "/v2/\(pathVariable0)"
-      }()
-      let query = [
-        URLQueryItem(name: "$alt", value: "json;enum-encoding=int")
-      ]
-      var req = try await self.inner.newRequest(path: path, query: query)
-      req.setMethod(.GET)
-      req.addHeader(name: "X-Goog-Api-Client", value: Clients.clientHeader)
-      return try await req.rpc(
-        IntelligenceConfig.self, timeout: options.attemptTimeout
-      ).get()
+      var routingParams: [String] = []
+      if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
+        routingParams.append("name=\(pathVariable0)")
+      }
+      let callOptions = try await self.makeCallOptions(
+        options: options, routingParams: routingParams)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.getOrganizationIntelligenceConfig(
+        protoRequest, callOptions: callOptions
+      )
+      return try IntelligenceConfig(proto: protoResponse)
     }
 
     public func updateOrganizationIntelligenceConfig(
       request: UpdateOrganizationIntelligenceConfigRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> IntelligenceConfig {
-      let path = try { () throws -> Swift.String in
-        guard let pathVariable0 = request.intelligenceConfig.map({ $0.name }),
-          !pathVariable0.isEmpty
-        else {
-          throw GoogleCloudGax.RequestError.binding(
-            "'request.intelligence_config.name' is not set or is empty")
-        }
-        return "/v2/\(pathVariable0)"
-      }()
-      var query = [
-        URLQueryItem(name: "$alt", value: "json;enum-encoding=int")
-      ]
-      let encoder = GoogleCloudGax.QueryParameterEncoder()
-      query.append(contentsOf: try encoder.encode(request.updateMask, prefix: "updateMask"))
-      query.append(contentsOf: try encoder.encode(request.requestId, prefix: "requestId"))
-      var req = try await self.inner.newRequest(path: path, query: query)
-      req.setMethod(.PATCH)
-      req.addHeader(name: "X-Goog-Api-Client", value: Clients.clientHeader)
-      if let body = request.intelligenceConfig {
-        req.setBody(data: try JSONEncoder().encode(body), ofContentType: "application/json")
+      var routingParams: [String] = []
+      if let pathVariable0 = request.intelligenceConfig.map({ $0.name }), !pathVariable0.isEmpty {
+        routingParams.append("intelligence_config.name=\(pathVariable0)")
       }
-      return try await req.rpc(
-        IntelligenceConfig.self, timeout: options.attemptTimeout
-      ).get()
+      let callOptions = try await self.makeCallOptions(
+        options: options, routingParams: routingParams)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.updateOrganizationIntelligenceConfig(
+        protoRequest, callOptions: callOptions
+      )
+      return try IntelligenceConfig(proto: protoResponse)
+    }
+
+    public func getIamPolicy(
+      request: GoogleIAMV1.GetIamPolicyRequest, options: GoogleCloudGax.RequestOptions
+    ) async throws -> GoogleIAMV1.Policy {
+      let callOptions = try await self.makeCallOptions(
+        options: options)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.getIamPolicy(
+        protoRequest, callOptions: callOptions
+      )
+      return try GoogleIAMV1.Policy(proto: protoResponse)
+    }
+
+    public func setIamPolicy(
+      request: GoogleIAMV1.SetIamPolicyRequest, options: GoogleCloudGax.RequestOptions
+    ) async throws -> GoogleIAMV1.Policy {
+      let callOptions = try await self.makeCallOptions(
+        options: options)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.setIamPolicy(
+        protoRequest, callOptions: callOptions
+      )
+      return try GoogleIAMV1.Policy(proto: protoResponse)
+    }
+
+    public func testIamPermissions(
+      request: GoogleIAMV1.TestIamPermissionsRequest, options: GoogleCloudGax.RequestOptions
+    ) async throws -> GoogleIAMV1.TestIamPermissionsResponse {
+      let callOptions = try await self.makeCallOptions(
+        options: options)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.testIamPermissions(
+        protoRequest, callOptions: callOptions
+      )
+      return try GoogleIAMV1.TestIamPermissionsResponse(proto: protoResponse)
     }
 
     public func getIntelligenceFinding(
       request: GetIntelligenceFindingRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> IntelligenceFinding {
-      let path = try { () throws -> Swift.String in
-        guard let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty else {
-          throw GoogleCloudGax.RequestError.binding("'request.name' is not set or is empty")
-        }
-        return "/v2/\(pathVariable0)"
-      }()
-      let query = [
-        URLQueryItem(name: "$alt", value: "json;enum-encoding=int")
-      ]
-      var req = try await self.inner.newRequest(path: path, query: query)
-      req.setMethod(.GET)
-      req.addHeader(name: "X-Goog-Api-Client", value: Clients.clientHeader)
-      return try await req.rpc(
-        IntelligenceFinding.self, timeout: options.attemptTimeout
-      ).get()
+      var routingParams: [String] = []
+      if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
+        routingParams.append("name=\(pathVariable0)")
+      }
+      let callOptions = try await self.makeCallOptions(
+        options: options, routingParams: routingParams)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.getIntelligenceFinding(
+        protoRequest, callOptions: callOptions
+      )
+      return try IntelligenceFinding(proto: protoResponse)
     }
 
     public func listIntelligenceFindings(
       request: ListIntelligenceFindingsRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> ListIntelligenceFindingsResponse {
-      let path = try { () throws -> Swift.String in
-        guard let pathVariable0 = request.parent as Swift.String?, !pathVariable0.isEmpty else {
-          throw GoogleCloudGax.RequestError.binding("'request.parent' is not set or is empty")
-        }
-        return "/v2/\(pathVariable0)/intelligenceFindings"
-      }()
-      var query = [
-        URLQueryItem(name: "$alt", value: "json;enum-encoding=int")
-      ]
-      let encoder = GoogleCloudGax.QueryParameterEncoder()
-      query.append(contentsOf: try encoder.encode(request.filter, prefix: "filter"))
-      query.append(contentsOf: try encoder.encode(request.pageSize, prefix: "pageSize"))
-      query.append(contentsOf: try encoder.encode(request.pageToken, prefix: "pageToken"))
-      var req = try await self.inner.newRequest(path: path, query: query)
-      req.setMethod(.GET)
-      req.addHeader(name: "X-Goog-Api-Client", value: Clients.clientHeader)
-      return try await req.rpc(
-        ListIntelligenceFindingsResponse.self, timeout: options.attemptTimeout
-      ).get()
+      var routingParams: [String] = []
+      if let pathVariable0 = request.parent as Swift.String?, !pathVariable0.isEmpty {
+        routingParams.append("parent=\(pathVariable0)")
+      }
+      let callOptions = try await self.makeCallOptions(
+        options: options, routingParams: routingParams)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.listIntelligenceFindings(
+        protoRequest, callOptions: callOptions
+      )
+      return try ListIntelligenceFindingsResponse(proto: protoResponse)
     }
 
     public func summarizeIntelligenceFindings(
       request: SummarizeIntelligenceFindingsRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> SummarizeIntelligenceFindingsResponse {
-      let path = try { () throws -> Swift.String in
-        guard let pathVariable0 = request.parent as Swift.String?, !pathVariable0.isEmpty else {
-          throw GoogleCloudGax.RequestError.binding("'request.parent' is not set or is empty")
-        }
-        return "/v2/\(pathVariable0)/intelligenceFindings:summarize"
-      }()
-      var query = [
-        URLQueryItem(name: "$alt", value: "json;enum-encoding=int")
-      ]
-      let encoder = GoogleCloudGax.QueryParameterEncoder()
-      query.append(contentsOf: try encoder.encode(request.resourceScope, prefix: "resourceScope"))
-      query.append(contentsOf: try encoder.encode(request.filter, prefix: "filter"))
-      query.append(contentsOf: try encoder.encode(request.pageSize, prefix: "pageSize"))
-      query.append(contentsOf: try encoder.encode(request.pageToken, prefix: "pageToken"))
-      var req = try await self.inner.newRequest(path: path, query: query)
-      req.setMethod(.GET)
-      req.addHeader(name: "X-Goog-Api-Client", value: Clients.clientHeader)
-      return try await req.rpc(
-        SummarizeIntelligenceFindingsResponse.self, timeout: options.attemptTimeout
-      ).get()
+      var routingParams: [String] = []
+      if let pathVariable0 = request.parent as Swift.String?, !pathVariable0.isEmpty {
+        routingParams.append("parent=\(pathVariable0)")
+      }
+      let callOptions = try await self.makeCallOptions(
+        options: options, routingParams: routingParams)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.summarizeIntelligenceFindings(
+        protoRequest, callOptions: callOptions
+      )
+      return try SummarizeIntelligenceFindingsResponse(proto: protoResponse)
     }
 
     public func getIntelligenceFindingRevision(
       request: GetIntelligenceFindingRevisionRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> IntelligenceFindingRevision {
-      let path = try { () throws -> Swift.String in
-        guard let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty else {
-          throw GoogleCloudGax.RequestError.binding("'request.name' is not set or is empty")
-        }
-        return "/v2/\(pathVariable0)"
-      }()
-      let query = [
-        URLQueryItem(name: "$alt", value: "json;enum-encoding=int")
-      ]
-      var req = try await self.inner.newRequest(path: path, query: query)
-      req.setMethod(.GET)
-      req.addHeader(name: "X-Goog-Api-Client", value: Clients.clientHeader)
-      return try await req.rpc(
-        IntelligenceFindingRevision.self, timeout: options.attemptTimeout
-      ).get()
+      var routingParams: [String] = []
+      if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
+        routingParams.append("name=\(pathVariable0)")
+      }
+      let callOptions = try await self.makeCallOptions(
+        options: options, routingParams: routingParams)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.getIntelligenceFindingRevision(
+        protoRequest, callOptions: callOptions
+      )
+      return try IntelligenceFindingRevision(proto: protoResponse)
     }
 
     public func listIntelligenceFindingRevisions(
       request: ListIntelligenceFindingRevisionsRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> ListIntelligenceFindingRevisionsResponse {
-      let path = try { () throws -> Swift.String in
-        guard let pathVariable0 = request.parent as Swift.String?, !pathVariable0.isEmpty else {
-          throw GoogleCloudGax.RequestError.binding("'request.parent' is not set or is empty")
-        }
-        return "/v2/\(pathVariable0)/revisions"
-      }()
-      var query = [
-        URLQueryItem(name: "$alt", value: "json;enum-encoding=int")
-      ]
-      let encoder = GoogleCloudGax.QueryParameterEncoder()
-      query.append(contentsOf: try encoder.encode(request.pageSize, prefix: "pageSize"))
-      query.append(contentsOf: try encoder.encode(request.pageToken, prefix: "pageToken"))
-      var req = try await self.inner.newRequest(path: path, query: query)
-      req.setMethod(.GET)
-      req.addHeader(name: "X-Goog-Api-Client", value: Clients.clientHeader)
-      return try await req.rpc(
-        ListIntelligenceFindingRevisionsResponse.self, timeout: options.attemptTimeout
-      ).get()
+      var routingParams: [String] = []
+      if let pathVariable0 = request.parent as Swift.String?, !pathVariable0.isEmpty {
+        routingParams.append("parent=\(pathVariable0)")
+      }
+      let callOptions = try await self.makeCallOptions(
+        options: options, routingParams: routingParams)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.grpcClient.listIntelligenceFindingRevisions(
+        protoRequest, callOptions: callOptions
+      )
+      return try ListIntelligenceFindingRevisionsResponse(proto: protoResponse)
     }
 
     public func getOperation(
       request: GoogleLongRunning.GetOperationRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> GoogleLongRunning.Operation {
-      let path = try { () throws -> Swift.String in
-        guard let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty else {
-          throw GoogleCloudGax.RequestError.binding("'request.name' is not set or is empty")
-        }
-        return "/v1/\(pathVariable0)"
-      }()
-      let query = [
-        URLQueryItem(name: "$alt", value: "json;enum-encoding=int")
-      ]
-      var req = try await self.inner.newRequest(path: path, query: query)
-      req.setMethod(.GET)
-      req.addHeader(name: "X-Goog-Api-Client", value: Clients.clientHeader)
-      return try await req.rpc(
-        GoogleLongRunning.Operation.self, timeout: options.attemptTimeout
-      ).get()
+      var routingParams: [String] = []
+      if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
+        routingParams.append("name=\(pathVariable0)")
+      }
+      let callOptions = try await self.makeCallOptions(
+        options: options, routingParams: routingParams)
+      let protoRequest = try request.toProto()
+      let protoResponse = try await self.operationsClient.getOperation(
+        protoRequest, callOptions: callOptions
+      )
+      return try GoogleLongRunning.Operation(proto: protoResponse)
     }
   }
 }
