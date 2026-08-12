@@ -981,7 +981,7 @@ libraries:
         - output: packages/storage/Sources/GoogleCloudStorage/generated/StorageControl
           service_config: google/storage/control/v2/storage_v2.yaml
           api_path: google/storage/control/v2
-          module_type: default
+          module_type: grpc-client
           module_path: StorageControlProtos
         - output: packages/storage/Sources/GoogleCloudStorage/generated/StorageControl/Convert/StorageControl
           api_path: google/storage/control/v2

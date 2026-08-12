@@ -15,81 +15,26 @@
 // limitations under the License.
 
 import Foundation
-import GRPC
 import GoogleCloudAuth
-import GoogleCloudGax
+@_spi(GoogleCloudInternal) import GoogleCloudGax
 import GoogleCloudWkt
 import GoogleIAMV1
 import GoogleLongRunning
 import GoogleRpc
-import NIO
 
 internal import StorageControlProtos
 internal import GoogleCloudWktConvert
 internal import SwiftProtobuf
 
 extension Clients {
-  class StorageControlTransport: StorageControlStub, @unchecked Sendable {
-    private let grpcClient: StorageControlProtos.Google_Storage_Control_V2_StorageControlAsyncClient
-    private let operationsClient: StorageControlProtos.Google_Longrunning_OperationsAsyncClient
-    private let connection: ClientConnection
-    private let credentials: GoogleCloudAuth.Credentials
-    private let options: GoogleCloudGax.ClientOptions
+  class StorageControlTransport: StorageControlStub {
+    let inner: GoogleCloudGax._GRPCClient
 
     public init(_ options: GoogleCloudGax.ClientOptions = .init()) throws {
-      self.options = options
-      self.credentials = try options.credentials ?? GoogleCloudAuth.Credentials()
-      self.connection = try Self.makeConnection(endpoint: options.endpoint)
-      self.grpcClient = StorageControlProtos.Google_Storage_Control_V2_StorageControlAsyncClient(
-        channel: self.connection
+      self.inner = try GoogleCloudGax._GRPCClient(
+        from: options,
+        withDefaultEndpoint: "https://storage.googleapis.com"
       )
-      self.operationsClient = StorageControlProtos.Google_Longrunning_OperationsAsyncClient(
-        channel: self.connection
-      )
-    }
-
-    deinit {
-      _ = self.connection.close()
-    }
-
-    private static func makeConnection(endpoint: String?) throws -> ClientConnection {
-      let raw = endpoint ?? "https://storage.googleapis.com"
-      guard let url = URLComponents(string: raw), let host = url.host, !host.isEmpty else {
-        throw GoogleCloudGax.ClientError.invalidEndpoint(raw)
-      }
-      let isSecure = url.scheme == "https"
-      let port = url.port ?? (isSecure ? 443 : 80)
-      let group = MultiThreadedEventLoopGroup.singleton
-      let builder =
-        isSecure
-        ? ClientConnection.usingPlatformAppropriateTLS(for: group)
-        : ClientConnection.insecure(group: group)
-      return builder.connect(host: host, port: port)
-    }
-
-    private func makeCallOptions(
-      options: GoogleCloudGax.RequestOptions,
-      routingParams: [String] = []
-    ) async throws -> GRPC.CallOptions {
-      var callOptions = GRPC.CallOptions()
-      if let attemptTimeout = options.attemptTimeout {
-        let nanoseconds =
-          attemptTimeout.components.seconds * 1_000_000_000
-          + attemptTimeout.components.attoseconds / 1_000_000_000
-        callOptions.timeLimit = .timeout(.nanoseconds(nanoseconds))
-      }
-      let authHeaders = try await self.credentials.headers()
-      for (key, value) in authHeaders {
-        callOptions.customMetadata.add(name: key, value: value)
-      }
-      callOptions.customMetadata.add(name: "x-goog-api-client", value: Clients.clientHeader)
-      if !routingParams.isEmpty {
-        callOptions.customMetadata.add(
-          name: "x-goog-request-params",
-          value: routingParams.joined(separator: "&")
-        )
-      }
-      return callOptions
     }
 
     public func createFolder(
@@ -99,12 +44,16 @@ extension Clients {
       if let pathVariable0 = request.parent as Swift.String?, !pathVariable0.isEmpty {
         routingParams.append("parent=\(pathVariable0)")
       }
-      let callOptions = try await self.makeCallOptions(
-        options: options, routingParams: routingParams)
+
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.createFolder(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_Folder =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/CreateFolder",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader,
+          routingParams: routingParams
+        )
       return try Folder(proto: protoResponse)
     }
 
@@ -115,10 +64,15 @@ extension Clients {
       if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
         routingParams.append("name=\(pathVariable0)")
       }
-      let callOptions = try await self.makeCallOptions(
-        options: options, routingParams: routingParams)
+
       let protoRequest = try request.toProto()
-      _ = try await self.grpcClient.deleteFolder(protoRequest, callOptions: callOptions)
+      let _: SwiftProtobuf.Google_Protobuf_Empty = try await self.inner.execute(
+        path: "/google.storage.control.v2.StorageControl/DeleteFolder",
+        request: protoRequest,
+        options: options,
+        clientHeader: Clients.clientHeader,
+        routingParams: routingParams
+      )
     }
 
     public func getFolder(
@@ -128,12 +82,16 @@ extension Clients {
       if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
         routingParams.append("name=\(pathVariable0)")
       }
-      let callOptions = try await self.makeCallOptions(
-        options: options, routingParams: routingParams)
+
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.getFolder(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_Folder =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/GetFolder",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader,
+          routingParams: routingParams
+        )
       return try Folder(proto: protoResponse)
     }
 
@@ -144,12 +102,16 @@ extension Clients {
       if let pathVariable0 = request.parent as Swift.String?, !pathVariable0.isEmpty {
         routingParams.append("parent=\(pathVariable0)")
       }
-      let callOptions = try await self.makeCallOptions(
-        options: options, routingParams: routingParams)
+
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.listFolders(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_ListFoldersResponse =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/ListFolders",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader,
+          routingParams: routingParams
+        )
       return try ListFoldersResponse(proto: protoResponse)
     }
 
@@ -160,12 +122,16 @@ extension Clients {
       if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
         routingParams.append("name=\(pathVariable0)")
       }
-      let callOptions = try await self.makeCallOptions(
-        options: options, routingParams: routingParams)
+
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.renameFolder(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Longrunning_Operation = try await self.inner
+        .execute(
+          path: "/google.storage.control.v2.StorageControl/RenameFolder",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader,
+          routingParams: routingParams
+        )
       return try GoogleLongRunning.Operation(proto: protoResponse)
     }
 
@@ -176,12 +142,16 @@ extension Clients {
       if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
         routingParams.append("name=\(pathVariable0)")
       }
-      let callOptions = try await self.makeCallOptions(
-        options: options, routingParams: routingParams)
+
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.deleteFolderRecursive(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Longrunning_Operation = try await self.inner
+        .execute(
+          path: "/google.storage.control.v2.StorageControl/DeleteFolderRecursive",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader,
+          routingParams: routingParams
+        )
       return try GoogleLongRunning.Operation(proto: protoResponse)
     }
 
@@ -192,201 +162,238 @@ extension Clients {
       if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
         routingParams.append("name=\(pathVariable0)")
       }
-      let callOptions = try await self.makeCallOptions(
-        options: options, routingParams: routingParams)
+
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.getStorageLayout(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_StorageLayout =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/GetStorageLayout",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader,
+          routingParams: routingParams
+        )
       return try StorageLayout(proto: protoResponse)
     }
 
     public func createManagedFolder(
       request: CreateManagedFolderRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> ManagedFolder {
-      let callOptions = try await self.makeCallOptions(
-        options: options)
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.createManagedFolder(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_ManagedFolder =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/CreateManagedFolder",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader
+        )
       return try ManagedFolder(proto: protoResponse)
     }
 
     public func deleteManagedFolder(
       request: DeleteManagedFolderRequest, options: GoogleCloudGax.RequestOptions
     ) async throws {
-      let callOptions = try await self.makeCallOptions(
-        options: options)
       let protoRequest = try request.toProto()
-      _ = try await self.grpcClient.deleteManagedFolder(protoRequest, callOptions: callOptions)
+      let _: SwiftProtobuf.Google_Protobuf_Empty = try await self.inner.execute(
+        path: "/google.storage.control.v2.StorageControl/DeleteManagedFolder",
+        request: protoRequest,
+        options: options,
+        clientHeader: Clients.clientHeader
+      )
     }
 
     public func getManagedFolder(
       request: GetManagedFolderRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> ManagedFolder {
-      let callOptions = try await self.makeCallOptions(
-        options: options)
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.getManagedFolder(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_ManagedFolder =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/GetManagedFolder",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader
+        )
       return try ManagedFolder(proto: protoResponse)
     }
 
     public func listManagedFolders(
       request: ListManagedFoldersRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> ListManagedFoldersResponse {
-      let callOptions = try await self.makeCallOptions(
-        options: options)
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.listManagedFolders(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_ListManagedFoldersResponse =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/ListManagedFolders",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader
+        )
       return try ListManagedFoldersResponse(proto: protoResponse)
     }
 
     public func updateManagedFolder(
       request: UpdateManagedFolderRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> ManagedFolder {
-      let callOptions = try await self.makeCallOptions(
-        options: options)
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.updateManagedFolder(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_ManagedFolder =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/UpdateManagedFolder",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader
+        )
       return try ManagedFolder(proto: protoResponse)
     }
 
     public func createAnywhereCache(
       request: CreateAnywhereCacheRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> GoogleLongRunning.Operation {
-      let callOptions = try await self.makeCallOptions(
-        options: options)
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.createAnywhereCache(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Longrunning_Operation = try await self.inner
+        .execute(
+          path: "/google.storage.control.v2.StorageControl/CreateAnywhereCache",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader
+        )
       return try GoogleLongRunning.Operation(proto: protoResponse)
     }
 
     public func updateAnywhereCache(
       request: UpdateAnywhereCacheRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> GoogleLongRunning.Operation {
-      let callOptions = try await self.makeCallOptions(
-        options: options)
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.updateAnywhereCache(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Longrunning_Operation = try await self.inner
+        .execute(
+          path: "/google.storage.control.v2.StorageControl/UpdateAnywhereCache",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader
+        )
       return try GoogleLongRunning.Operation(proto: protoResponse)
     }
 
     public func disableAnywhereCache(
       request: DisableAnywhereCacheRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> AnywhereCache {
-      let callOptions = try await self.makeCallOptions(
-        options: options)
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.disableAnywhereCache(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_AnywhereCache =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/DisableAnywhereCache",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader
+        )
       return try AnywhereCache(proto: protoResponse)
     }
 
     public func pauseAnywhereCache(
       request: PauseAnywhereCacheRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> AnywhereCache {
-      let callOptions = try await self.makeCallOptions(
-        options: options)
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.pauseAnywhereCache(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_AnywhereCache =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/PauseAnywhereCache",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader
+        )
       return try AnywhereCache(proto: protoResponse)
     }
 
     public func resumeAnywhereCache(
       request: ResumeAnywhereCacheRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> AnywhereCache {
-      let callOptions = try await self.makeCallOptions(
-        options: options)
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.resumeAnywhereCache(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_AnywhereCache =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/ResumeAnywhereCache",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader
+        )
       return try AnywhereCache(proto: protoResponse)
     }
 
     public func getAnywhereCache(
       request: GetAnywhereCacheRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> AnywhereCache {
-      let callOptions = try await self.makeCallOptions(
-        options: options)
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.getAnywhereCache(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_AnywhereCache =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/GetAnywhereCache",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader
+        )
       return try AnywhereCache(proto: protoResponse)
     }
 
     public func listAnywhereCaches(
       request: ListAnywhereCachesRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> ListAnywhereCachesResponse {
-      let callOptions = try await self.makeCallOptions(
-        options: options)
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.listAnywhereCaches(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_ListAnywhereCachesResponse =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/ListAnywhereCaches",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader
+        )
       return try ListAnywhereCachesResponse(proto: protoResponse)
     }
 
     public func createRapidCache(
       request: CreateRapidCacheRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> GoogleLongRunning.Operation {
-      let callOptions = try await self.makeCallOptions(
-        options: options)
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.createRapidCache(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Longrunning_Operation = try await self.inner
+        .execute(
+          path: "/google.storage.control.v2.StorageControl/CreateRapidCache",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader
+        )
       return try GoogleLongRunning.Operation(proto: protoResponse)
     }
 
     public func updateRapidCache(
       request: UpdateRapidCacheRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> GoogleLongRunning.Operation {
-      let callOptions = try await self.makeCallOptions(
-        options: options)
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.updateRapidCache(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Longrunning_Operation = try await self.inner
+        .execute(
+          path: "/google.storage.control.v2.StorageControl/UpdateRapidCache",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader
+        )
       return try GoogleLongRunning.Operation(proto: protoResponse)
     }
 
     public func getRapidCache(
       request: GetRapidCacheRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> RapidCache {
-      let callOptions = try await self.makeCallOptions(
-        options: options)
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.getRapidCache(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_RapidCache =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/GetRapidCache",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader
+        )
       return try RapidCache(proto: protoResponse)
     }
 
     public func listRapidCaches(
       request: ListRapidCachesRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> ListRapidCachesResponse {
-      let callOptions = try await self.makeCallOptions(
-        options: options)
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.listRapidCaches(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_ListRapidCachesResponse =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/ListRapidCaches",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader
+        )
       return try ListRapidCachesResponse(proto: protoResponse)
     }
 
@@ -397,12 +404,16 @@ extension Clients {
       if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
         routingParams.append("name=\(pathVariable0)")
       }
-      let callOptions = try await self.makeCallOptions(
-        options: options, routingParams: routingParams)
+
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.getProjectIntelligenceConfig(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_IntelligenceConfig =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/GetProjectIntelligenceConfig",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader,
+          routingParams: routingParams
+        )
       return try IntelligenceConfig(proto: protoResponse)
     }
 
@@ -413,12 +424,16 @@ extension Clients {
       if let pathVariable0 = request.intelligenceConfig.map({ $0.name }), !pathVariable0.isEmpty {
         routingParams.append("intelligence_config.name=\(pathVariable0)")
       }
-      let callOptions = try await self.makeCallOptions(
-        options: options, routingParams: routingParams)
+
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.updateProjectIntelligenceConfig(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_IntelligenceConfig =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/UpdateProjectIntelligenceConfig",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader,
+          routingParams: routingParams
+        )
       return try IntelligenceConfig(proto: protoResponse)
     }
 
@@ -429,12 +444,16 @@ extension Clients {
       if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
         routingParams.append("name=\(pathVariable0)")
       }
-      let callOptions = try await self.makeCallOptions(
-        options: options, routingParams: routingParams)
+
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.getFolderIntelligenceConfig(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_IntelligenceConfig =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/GetFolderIntelligenceConfig",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader,
+          routingParams: routingParams
+        )
       return try IntelligenceConfig(proto: protoResponse)
     }
 
@@ -445,12 +464,16 @@ extension Clients {
       if let pathVariable0 = request.intelligenceConfig.map({ $0.name }), !pathVariable0.isEmpty {
         routingParams.append("intelligence_config.name=\(pathVariable0)")
       }
-      let callOptions = try await self.makeCallOptions(
-        options: options, routingParams: routingParams)
+
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.updateFolderIntelligenceConfig(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_IntelligenceConfig =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/UpdateFolderIntelligenceConfig",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader,
+          routingParams: routingParams
+        )
       return try IntelligenceConfig(proto: protoResponse)
     }
 
@@ -461,12 +484,16 @@ extension Clients {
       if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
         routingParams.append("name=\(pathVariable0)")
       }
-      let callOptions = try await self.makeCallOptions(
-        options: options, routingParams: routingParams)
+
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.getOrganizationIntelligenceConfig(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_IntelligenceConfig =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/GetOrganizationIntelligenceConfig",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader,
+          routingParams: routingParams
+        )
       return try IntelligenceConfig(proto: protoResponse)
     }
 
@@ -477,23 +504,28 @@ extension Clients {
       if let pathVariable0 = request.intelligenceConfig.map({ $0.name }), !pathVariable0.isEmpty {
         routingParams.append("intelligence_config.name=\(pathVariable0)")
       }
-      let callOptions = try await self.makeCallOptions(
-        options: options, routingParams: routingParams)
+
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.updateOrganizationIntelligenceConfig(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_IntelligenceConfig =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/UpdateOrganizationIntelligenceConfig",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader,
+          routingParams: routingParams
+        )
       return try IntelligenceConfig(proto: protoResponse)
     }
 
     public func getIamPolicy(
       request: GoogleIAMV1.GetIamPolicyRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> GoogleIAMV1.Policy {
-      let callOptions = try await self.makeCallOptions(
-        options: options)
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.getIamPolicy(
-        protoRequest, callOptions: callOptions
+      let protoResponse: StorageControlProtos.Google_Iam_V1_Policy = try await self.inner.execute(
+        path: "/google.storage.control.v2.StorageControl/GetIamPolicy",
+        request: protoRequest,
+        options: options,
+        clientHeader: Clients.clientHeader
       )
       return try GoogleIAMV1.Policy(proto: protoResponse)
     }
@@ -501,11 +533,12 @@ extension Clients {
     public func setIamPolicy(
       request: GoogleIAMV1.SetIamPolicyRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> GoogleIAMV1.Policy {
-      let callOptions = try await self.makeCallOptions(
-        options: options)
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.setIamPolicy(
-        protoRequest, callOptions: callOptions
+      let protoResponse: StorageControlProtos.Google_Iam_V1_Policy = try await self.inner.execute(
+        path: "/google.storage.control.v2.StorageControl/SetIamPolicy",
+        request: protoRequest,
+        options: options,
+        clientHeader: Clients.clientHeader
       )
       return try GoogleIAMV1.Policy(proto: protoResponse)
     }
@@ -513,12 +546,14 @@ extension Clients {
     public func testIamPermissions(
       request: GoogleIAMV1.TestIamPermissionsRequest, options: GoogleCloudGax.RequestOptions
     ) async throws -> GoogleIAMV1.TestIamPermissionsResponse {
-      let callOptions = try await self.makeCallOptions(
-        options: options)
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.testIamPermissions(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Iam_V1_TestIamPermissionsResponse =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/TestIamPermissions",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader
+        )
       return try GoogleIAMV1.TestIamPermissionsResponse(proto: protoResponse)
     }
 
@@ -529,12 +564,16 @@ extension Clients {
       if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
         routingParams.append("name=\(pathVariable0)")
       }
-      let callOptions = try await self.makeCallOptions(
-        options: options, routingParams: routingParams)
+
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.getIntelligenceFinding(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Storage_Control_V2_IntelligenceFinding =
+        try await self.inner.execute(
+          path: "/google.storage.control.v2.StorageControl/GetIntelligenceFinding",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader,
+          routingParams: routingParams
+        )
       return try IntelligenceFinding(proto: protoResponse)
     }
 
@@ -545,12 +584,17 @@ extension Clients {
       if let pathVariable0 = request.parent as Swift.String?, !pathVariable0.isEmpty {
         routingParams.append("parent=\(pathVariable0)")
       }
-      let callOptions = try await self.makeCallOptions(
-        options: options, routingParams: routingParams)
+
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.listIntelligenceFindings(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse:
+        StorageControlProtos.Google_Storage_Control_V2_ListIntelligenceFindingsResponse =
+          try await self.inner.execute(
+            path: "/google.storage.control.v2.StorageControl/ListIntelligenceFindings",
+            request: protoRequest,
+            options: options,
+            clientHeader: Clients.clientHeader,
+            routingParams: routingParams
+          )
       return try ListIntelligenceFindingsResponse(proto: protoResponse)
     }
 
@@ -561,12 +605,17 @@ extension Clients {
       if let pathVariable0 = request.parent as Swift.String?, !pathVariable0.isEmpty {
         routingParams.append("parent=\(pathVariable0)")
       }
-      let callOptions = try await self.makeCallOptions(
-        options: options, routingParams: routingParams)
+
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.summarizeIntelligenceFindings(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse:
+        StorageControlProtos.Google_Storage_Control_V2_SummarizeIntelligenceFindingsResponse =
+          try await self.inner.execute(
+            path: "/google.storage.control.v2.StorageControl/SummarizeIntelligenceFindings",
+            request: protoRequest,
+            options: options,
+            clientHeader: Clients.clientHeader,
+            routingParams: routingParams
+          )
       return try SummarizeIntelligenceFindingsResponse(proto: protoResponse)
     }
 
@@ -577,12 +626,17 @@ extension Clients {
       if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
         routingParams.append("name=\(pathVariable0)")
       }
-      let callOptions = try await self.makeCallOptions(
-        options: options, routingParams: routingParams)
+
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.getIntelligenceFindingRevision(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse:
+        StorageControlProtos.Google_Storage_Control_V2_IntelligenceFindingRevision =
+          try await self.inner.execute(
+            path: "/google.storage.control.v2.StorageControl/GetIntelligenceFindingRevision",
+            request: protoRequest,
+            options: options,
+            clientHeader: Clients.clientHeader,
+            routingParams: routingParams
+          )
       return try IntelligenceFindingRevision(proto: protoResponse)
     }
 
@@ -593,12 +647,17 @@ extension Clients {
       if let pathVariable0 = request.parent as Swift.String?, !pathVariable0.isEmpty {
         routingParams.append("parent=\(pathVariable0)")
       }
-      let callOptions = try await self.makeCallOptions(
-        options: options, routingParams: routingParams)
+
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.grpcClient.listIntelligenceFindingRevisions(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse:
+        StorageControlProtos.Google_Storage_Control_V2_ListIntelligenceFindingRevisionsResponse =
+          try await self.inner.execute(
+            path: "/google.storage.control.v2.StorageControl/ListIntelligenceFindingRevisions",
+            request: protoRequest,
+            options: options,
+            clientHeader: Clients.clientHeader,
+            routingParams: routingParams
+          )
       return try ListIntelligenceFindingRevisionsResponse(proto: protoResponse)
     }
 
@@ -609,12 +668,16 @@ extension Clients {
       if let pathVariable0 = request.name as Swift.String?, !pathVariable0.isEmpty {
         routingParams.append("name=\(pathVariable0)")
       }
-      let callOptions = try await self.makeCallOptions(
-        options: options, routingParams: routingParams)
+
       let protoRequest = try request.toProto()
-      let protoResponse = try await self.operationsClient.getOperation(
-        protoRequest, callOptions: callOptions
-      )
+      let protoResponse: StorageControlProtos.Google_Longrunning_Operation = try await self.inner
+        .execute(
+          path: "/google.longrunning.Operations/GetOperation",
+          request: protoRequest,
+          options: options,
+          clientHeader: Clients.clientHeader,
+          routingParams: routingParams
+        )
       return try GoogleLongRunning.Operation(proto: protoResponse)
     }
   }
