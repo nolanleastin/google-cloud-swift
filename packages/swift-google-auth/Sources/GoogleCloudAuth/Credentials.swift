@@ -145,7 +145,7 @@ public struct ExternalAccountConfig: Sendable {
   public var workforcePoolUserProject: String? = nil
 
   /// Scopes requested for the exchanged token.
-  public var scopes: [String] = []
+  public var scopes: [String] = ["https://www.googleapis.com/auth/cloud-platform"]
 
   /// Google Cloud universe domain override.
   public var universeDomain: String? = nil

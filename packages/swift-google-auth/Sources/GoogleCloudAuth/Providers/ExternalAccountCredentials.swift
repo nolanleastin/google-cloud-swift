@@ -98,6 +98,8 @@ struct ExternalAccountCredentials: CredentialsProvider, Sendable {
   private let cache: TokenCache<ContinuousClock>
 
   let subjectTokenProvider: any SubjectTokenProvider
+  public static let defaultScope = "https://www.googleapis.com/auth/cloud-platform"
+
   let audience: String
   let subjectTokenType: String
   let tokenURL: URL
@@ -117,7 +119,7 @@ struct ExternalAccountCredentials: CredentialsProvider, Sendable {
     clientSecret: String? = nil,
     targetPrincipal: String? = nil,
     workforcePoolUserProject: String? = nil,
-    scopes: [String] = [],
+    scopes: [String] = [Self.defaultScope],
     universeDomain: String? = nil,
     retryConfiguration: RetryConfiguration? = nil,
     httpClient: AuthHTTPClient = AuthHTTPClient()
@@ -147,6 +149,8 @@ struct ExternalAccountCredentials: CredentialsProvider, Sendable {
       }
     }
 
+    let effectiveScopes = scopes.isEmpty ? [Self.defaultScope] : scopes
+
     self.subjectTokenProvider = subjectTokenProvider
     self.audience = audience
     self.subjectTokenType = subjectTokenType
@@ -155,7 +159,7 @@ struct ExternalAccountCredentials: CredentialsProvider, Sendable {
     self.clientSecret = clientSecret
     self.targetPrincipal = targetPrincipal
     self.workforcePoolUserProject = workforcePoolUserProject
-    self.scopes = scopes
+    self.scopes = effectiveScopes
     self.universeDomain = universeDomain
 
     let provider = ExternalAccountTokenProvider(
@@ -163,7 +167,7 @@ struct ExternalAccountCredentials: CredentialsProvider, Sendable {
       tokenURL: tokenURL,
       subjectTokenType: subjectTokenType,
       audience: audience,
-      scopes: scopes,
+      scopes: effectiveScopes,
       workforcePoolUserProject: workforcePoolUserProject,
       clientID: clientID,
       clientSecret: clientSecret,
